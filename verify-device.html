@@ -1,0 +1,114 @@
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Register Device</title>
+</head>
+<body>
+  <h1>Register Device</h1>
+  <form action="register-device" method="post">
+    <label for="deviceId">Device ID:</label>
+   <input type="text" id="deviceId" name="deviceId" value="" required><br>
+<label for="responseToChallenge">Response:</label>
+    <input type="text" id="responseToChallenge" name="responseToChallenge" value="" required><br>
+<label for="Bio1">Bio1: </label>
+   <input type="text" id="Bio1" name="Bio1" required><br>
+<label for="Bio2">Bio2: </label>
+   <input type="text" id="Bio2" name="Bio2" required><br>
+<div style="display: inline-block;">
+    <label for="z">z:</label>
+    <input type="text" id="z" name="z" value="" required>
+<button type="button" onclick="hashInput()">Calculate z</button>
+  </div>
+  <div style="display: inline-block;">
+    <label for="w">w:</label>
+    <input type="text" id="w" name="w" value="" required>
+<button type="button" onclick="hashInputforw()">Calculate w</button>
+    
+  </div>
+    <input type="submit" value="Verify">
+    <input type="hidden" id="challenge" name="challenge" value="">
+    <input type="hidden" id="challengeid" name="challengeid" value="123">
+    <input type="hidden"  id="f" name="f" value="">
+
+  </form>
+
+  <script>
+// Generate random challenge and fill the response field
+var challengeid = Math.floor(Math.random() * 100) + 1; // Generate random challengeid between 1 and 100
+var challenge = new Uint8Array(16);
+var random = window.crypto.getRandomValues(challenge); // Generate random challenge
+
+document.getElementById("challenge").value = btoa(String.fromCharCode.apply(null, challenge)); // Set the value of the hidden input field "challenge"
+document.getElementById("responseToChallenge").value = calculateExpectedResponse(challenge, challengeid);
+var random2 = new Uint8Array([challengeid]); // creates a Uint8Array with the challengeid
+var f = btoa(String.fromCharCode.apply(null, random2)); // encodes the Uint8Array as a base-64 string
+document.getElementById("f").value = f; // sets the value of the HTML element with the ID "f"
+
+
+// Get the MAC address of the client
+var macAddress = '<%= InetAddress.getLocalHost().getHostName() %>';
+
+// Get the IP address of the client
+var ipAddress = '<%= request.getRemoteAddr() %>';
+
+// Calculate the XOR of the MAC and IP addresses
+var deviceIdValue = "";
+for (var i = 0; i < macAddress.length; i++) {
+  deviceIdValue += String.fromCharCode(macAddress.charCodeAt(i) ^ ipAddress.charCodeAt(i));
+}
+var deviceIdValueBase64 = btoa(deviceIdValue);
+
+// Pad deviceIdValueBase64 with zeros to make it 64 bits
+while (deviceIdValueBase64.length < 8) {
+  deviceIdValueBase64 = '0' + deviceIdValueBase64;
+}
+
+document.getElementById("deviceId").value = deviceIdValueBase64;
+
+// Generate random challenge and fill the response field
+function calculateExpectedResponse(challenge, challengeid) {
+  var reply = new Uint8Array(16);
+  var responseStr = "";
+
+  // Generate response using a simple XOR function
+  for (var i = 0; i < challenge.length; i++) {
+    reply[i] = challenge[i] ^ challengeid;
+  }
+
+  responseStr = btoa(String.fromCharCode.apply(null, reply)); // Convert response to base64 string
+  return responseStr;
+
+}
+
+async function hashInput() {
+  const input = document.getElementById("Bio1").value;
+  const buffer = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hash));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const eightBitHash = hashHex.substring(0, 16); // take the first 16 characters
+  document.getElementById("z").value = eightBitHash;
+}
+
+
+
+async function hashInputforw(){
+  const input = document.getElementById("deviceId").value;
+  const buffer = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hash));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const eightBitHash = hashHex.substring(0, 16); // take the first 16 characters
+  document.getElementById("w").value = eightBitHash;
+}
+
+    
+</script>
+
+</body>
+</html>

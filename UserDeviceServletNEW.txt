@@ -1,0 +1,192 @@
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Base64;
+import java.util.Random;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
+import javax.servlet.ServletContext;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+public class UserDeviceServlet extends HttpServlet {
+    private String user_jdbcURL = "jdbc:mysql://localhost:3306/userdb";
+    private String user_jdbcuserid = "root";
+    private String user_jdbcPassword = "Cartoon";
+    private Connection user_jdbcConnection;
+
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        // Step 1: Retrieve biometric information
+        String bio1 = request.getParameter("bio1");
+        String bio2 = request.getParameter("bio2");
+
+        // Step 2: Retrieve Beta value from the database
+        String Beta = getBetaFromDatabase(bio1, bio2);
+
+        boolean verificationSuccessful = false; // Flag to indicate if nonce verification was successful
+
+        if (Beta != null) {
+            String nonceN1 = NonceGenerator.generateNonce();
+            sendToGateway(Beta, nonceN1, request, response);
+
+        } else {
+            // Redirect to the error page if Beta retrieval fails
+            response.sendRedirect("errormsg.jsp");
+            return;
+        }
+
+        // Now perform the verification logic for nonceN2
+       String nonceN2 = (String) request.getAttribute("nonceN2");
+        String challengeCU = (String) request.getAttribute("challenge");
+
+
+        boolean isNonceN2Valid = NonceVerifier.verifyNonce(nonceN2);
+
+        if (isNonceN2Valid) {
+            // NonceN2 verification successful, proceed with response calculation
+
+            byte[] challengeBytes = Base64.getDecoder().decode(challengeCU);
+            byte challengeId = 123; // Replace with the actual challengeId
+
+            // Calculate the expected response using the provided logic
+            String responseCU = calculateExpectedResponse(challengeBytes, challengeId);
+
+            // Set the verification flag to true
+            verificationSuccessful = true;
+String nonceN3 = NonceGenerator.generateNonce();
+ int Q = new Random().nextInt();
+
+            // Now perform any other logic that needs to be done for successful verification...
+        } else {
+            // NonceN2 verification failed, handle the error...
+            verificationSuccessful = false;
+        }
+
+        // Perform the final redirect based on the verification result
+        if (verificationSuccessful) {
+            response.sendRedirect("register.jsp");
+        } else {
+            response.sendRedirect("error.jsp");
+        }
+    }
+
+    private void sendToGateway(String Beta, String nonceN1, HttpServletRequest request, HttpServletResponse response) {
+        // Get the servlet context
+        ServletContext context = getServletContext();
+
+        // Get the RequestDispatcher for the GatewayServlet
+        RequestDispatcher dispatcher = context.getRequestDispatcher("/gateway");
+
+        try {
+            // Set the attributes in the request object
+            request.setAttribute("Beta", Beta);
+            request.setAttribute("nonceN1", nonceN1);
+try (FileWriter fileWriter = new FileWriter("C:/Program Files/apache-tomcat-8.5.87/webapps/AUTHENTICATION/Beta.log", true);
+             PrintWriter printWriter = new PrintWriter(fileWriter)) {
+            printWriter.println("The value of n1in userservelet is: " + nonceN1);
+        }
+            // Forward the modified request and response to the GatewayServlet
+            dispatcher.forward(request, response);
+        } catch (ServletException | IOException e) {
+            // Handle any exceptions
+            e.printStackTrace();
+        }
+    }
+
+
+    private String calculateExpectedResponse(byte[] challenge, byte challengeId) {
+        byte[] reply = new byte[challenge.length];
+
+        // Generate response using a simple XOR function
+        for (int i = 0; i < challenge.length; i++) {
+            reply[i] = (byte) (challenge[i] ^ challengeId);
+        }
+
+        String responseStr = Base64.getEncoder().encodeToString(reply); // Convert response to Base64 string
+
+        return responseStr;
+    }
+
+    private String getBetaFromDatabase(String bio1, String bio2) {
+        String Beta = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
+
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            user_jdbcConnection = DriverManager.getConnection(user_jdbcURL, user_jdbcuserid, user_jdbcPassword);
+
+            String query = "SELECT Beta FROM users WHERE bio1 = ? AND bio2 = ?";
+            statement = user_jdbcConnection.prepareStatement(query);
+            statement.setString(1, bio1);
+            statement.setString(2, bio2);
+
+            // Execute the query
+            resultSet = statement.executeQuery();
+
+            // Retrieve the Beta value
+            if (resultSet.next()) {
+                Beta = resultSet.getString("Beta");
+            }
+        } catch (ClassNotFoundException | SQLException e) {
+            e.printStackTrace();
+        } finally {
+            // Close the database resources
+            try {
+                if (resultSet != null) {
+                    resultSet.close();
+                }
+                if (statement != null) {
+                    statement.close();
+                }
+                if (user_jdbcConnection != null) {
+                    user_jdbcConnection.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return Beta;
+    }
+
+    // ... (Other methods go here)
+
+    static class NonceGenerator {
+        public static String generateNonce() throws IOException {
+            long timestamp = System.currentTimeMillis();
+
+            return String.valueOf(timestamp);
+        }
+    }
+
+    static class NonceVerifier {
+        public static boolean verifyNonce(String nonce) {
+            try {
+                long timestamp = Long.parseLong(nonce);
+                long currentTimestamp = System.currentTimeMillis();
+
+                // Adjust the maximum allowable time difference between the nonce and current time as needed
+                long maxTimeDifferenceMillis = 10000; // 10 seconds
+
+                if (Math.abs(currentTimestamp - timestamp) <= maxTimeDifferenceMillis) {
+                    // Nonce verification successful
+                    return true;
+                }
+            } catch (NumberFormatException e) {
+                // Nonce format is invalid
+            }
+
+            // Nonce verification failed
+            return false;
+        }
+    }
+}

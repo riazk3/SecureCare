@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Register Device</title>
+</head>
+<body>
+  <h1>Register Device</h1>
+  <form action="verify-response" method="post">
+    <label for="deviceId">Device ID:</label>
+    <input type="text" id="deviceId" name="deviceId" required><br>
+    <input type="text" id="responseToChallenge" name="responseToChallenge" value="" required><br>
+
+    <input type="submit" value="Verify">
+    <input type="hidden" id="challenge" name="challenge" value="">
+    <input type="hidden" id="challengeid" name="challengeid" value="123">
+    <input type="hidden" id="random2" name="random2" value="">
+
+    <input type="button" value="Generate Challenge" onclick="generateRandomNumbers()">
+  </form>
+
+  <script>
+    // set the value of responseToChallenge field to the expected value
+    document.getElementById("responseToChallenge").value = calculateExpectedResponse();
+  </script>
+
+  <script>
+    function calculateExpectedResponse(challenge, challengeid) {
+      var reply = new Uint8Array(16);
+      var responseStr = "";
+
+      // Generate response using a simple XOR function
+      for (var i = 0; i < challenge.length; i++) {
+        reply[i] = challenge[i] ^ challengeid;
+      }
+
+      responseStr = btoa(String.fromCharCode.apply(null, reply)); // Convert response to base64 string
+      return responseStr;
+    }
+
+    function generateRandomNumbers() {
+      var challengeid = 123;
+      var challenge = new Uint8Array(16);
+      var random = window.crypto.getRandomValues(challenge); // Generate random challenge
+
+      document.getElementById("challenge").value = btoa(String.fromCharCode.apply(null, challenge)); // Set the value of the hidden input field "challenge"
+      document.getElementById("responseToChallenge").value = calculateExpectedResponse(challenge, challengeid);
+
+      var random2 = Math.floor(Math.random() * 1000) + 1; // Generate another random number between 1 and 1000
+      document.getElementById("random2").value = random2; // Set the value of the hidden input field "random2"
+    }
+  </script>
+</body>
+</html>
